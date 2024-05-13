@@ -22,9 +22,10 @@ import org.keycloak.storage.ldap.LDAPStorageProvider;
 import org.keycloak.storage.ldap.idm.model.LDAPObject;
 import org.keycloak.storage.ldap.idm.query.internal.LDAPQuery;
 import org.keycloak.storage.ldap.mappers.AbstractLDAPStorageMapper;
-import java.util.Collections;
+
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * @author Bart Janssens
@@ -34,6 +35,7 @@ public class LdapPosixAccount extends AbstractLDAPStorageMapper {
     private static final Logger logger = Logger.getLogger(LdapPosixAccount.class);
     public static final String LDAP_NEXT_UID = "ldap.next.uid";
     public static final String LDAP_POSIX_UID_ATTRIBUTE_NAME = "uidNumber";
+    public static final String LDAP_POSIX_GID_ATTRIBUTE_NAME = "gidNumber";
     public static final String LDAP_POSIX_HOME_ATTRIBUTE_NAME = "homeDirectory";
 
     public LdapPosixAccount(ComponentModel mapperModel, LDAPStorageProvider ldapProvider) {
@@ -49,10 +51,17 @@ public class LdapPosixAccount extends AbstractLDAPStorageMapper {
     @Override
     public void onRegisterUserToLDAP(LDAPObject ldapUser, UserModel localUser, RealmModel realm) {
         logger.debug("Adding ldap user" + ldapUser.toString());
-        ldapUser.setSingleAttribute(LDAP_POSIX_UID_ATTRIBUTE_NAME, getUid());
-        String username = localUser.getUsername();
+        final String username = localUser.getUsername();
+
+        final String uid = getAndIncrementNextUid(realm);
+        
+        // We need to set posixAccount Object class, while preserving existent classes
+        ldapUser.setObjectClasses(Stream.concat(ldapUser.getObjectClasses().stream(), Stream.of("posixAccount")).toList());
+
+        // set the required posixAccount attributes (uid, gid, home dir)
+        ldapUser.setSingleAttribute(LDAP_POSIX_UID_ATTRIBUTE_NAME, uid);
+        ldapUser.setSingleAttribute(LDAP_POSIX_GID_ATTRIBUTE_NAME, uid);
         ldapUser.setSingleAttribute(LDAP_POSIX_HOME_ATTRIBUTE_NAME, "/home/" + username);
-        updateUid(realm);
     }
 
     @Override
@@ -72,13 +81,15 @@ public class LdapPosixAccount extends AbstractLDAPStorageMapper {
     public void beforeLDAPQuery(LDAPQuery query) {
     }
 
-    private String getUid() {
-        return mapperModel.getConfig().getFirst(LDAP_NEXT_UID);
+    private int getUid() {
+        return Integer.parseInt(mapperModel.getConfig().getFirst(LDAP_NEXT_UID));
     }
 
-    private void updateUid(RealmModel realm) {
-        int next_uid = Integer.parseInt(getUid()) + 1;
-        mapperModel.getConfig().putSingle(LDAP_NEXT_UID, String.valueOf(next_uid));
+    private synchronized String getAndIncrementNextUid(RealmModel realm) {
+        final String stringNextUid = String.valueOf(getUid() + 1);
+        mapperModel.getConfig().putSingle(LDAP_NEXT_UID, stringNextUid);
         realm.updateComponent(mapperModel);
+        return stringNextUid;
     }
+    
 }
