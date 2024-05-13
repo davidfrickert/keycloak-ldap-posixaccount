@@ -1,13 +1,19 @@
 # keycloak-ldap-posixaccount
 
-This is a Keycloak extension to automatically increment the POSIX account UID number (LDAP attribute uidNumber) when newly creating LDAP users. Also sets `homeDirectory` to `/home/username`.
+This is a Keycloak extension to support creating LDAP Users of class `posixAccount`. This class requires `uidNumber`, `gidNumber` and `homeDirectory` attributes set. Also, the class `posixAccount` must be set as Keycloak does not do it by default.
 
 ## Usage
 
-Run the maven package command:
+Package the jar by running the following makefile command:
 
 ```bash
-mvn compile
+make clean_build
+# or 
+make build
+```
+
+Alteratively, maven can be used directly as well:
+```bash
 mvn package
 ```
 
